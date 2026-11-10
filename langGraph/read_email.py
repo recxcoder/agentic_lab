@@ -21,7 +21,8 @@ class EmailState(TypedDict):
 model = ChatOpenAI(
     model="openai/gpt-oss-120b",
     temperature=0,
-    api_key=os.getenv("GROQ_API_KEY")
+    api_key=os.getenv("GROQ_API_KEY"),
+    base_url="https://api.groq.com/openai/v1"
     )
 
 def read_email(state: EmailState):
@@ -49,7 +50,7 @@ def classify_email(state: EmailState):
     If it is legitmate, categorize it (inquiry, complaint, thank you, etc.).
     """
     # Call the LLM
-    messages = [HumanMessage(content[prompt])]
+    messages = [HumanMessage(content=prompt)]
     response = model.invoke(messages)
 
     # Simple logic to parse the response
@@ -59,7 +60,7 @@ def classify_email(state: EmailState):
     # Extract reason if it's spam
     spam_reason = None
     if is_spam and "reason:" in response_text:
-        spam_reason = response_text.spilt("reason:")[1].strip()
+        spam_reason = response_text.split("reason:")[1].strip()
 
     # Determine category if legitmate
     email_category = None
@@ -85,7 +86,7 @@ def classify_email(state: EmailState):
 
 def handle_spam(state: EmailState):
     """Alfred discards spam email with a note"""
-    print(f"Alfred has marked the email as spam. Reason: {state['spam)reason']}")
+    print(f"Alfred has marked the email as spam. Reason: {state['spam_reason']}")
     print(f"The email has been moved to the spam folder.")
 
     return {}
@@ -109,17 +110,17 @@ def draft_response(state: EmailState):
     Draft a brief, professional response that Mr. Hugg ca review and personalize before sending.
     """
 
-    messages = [Humanmessage(content=prompt)]
+    messages = [HumanMessage(content=prompt)]
     response = model.invoke(messages)
 
     new_messages = state.get("messages", []) + [
         {"role": "user", "content": prompt},
-        {"role": "assistant", "content": respose.content}
+        {"role": "assistant", "content": response.content}
     ]
 
     return {
         "email_draft": response.content,
-        "messages": new_messasges
+        "messages": new_messages
     }
 
 
@@ -174,3 +175,52 @@ email_graph.add_edge("draft_response", "notify_mr_hugg")
 email_graph.add_edge("notify_mr_hugg", END)
 
 compile_graph = email_graph.compile()
+
+
+# Example legitimate email
+legitimate_email = {
+    "sender": "john.smith@example.com",
+    "subject": "Question about your services",
+    "body": "Dear Mr. Hugg, I was referred to you by a colleague and I'm interested in learning more about your consulting services. Could we schedule a call next week? Best regards, John Smith"
+}
+
+# Example spam email
+spam_email = {
+    "sender": "winner@lottery-intl.com",
+    "subject": "YOU HAVE WON $5,000,000!!!",
+    "body": "CONGRATULATIONS! You have been selected as the winner of our international lottery! To claim your $5,000,000 prize, please send us your bank details and a processing fee of $100."
+}
+
+# Process legitimate email
+print("\nProcessing legitimate email...")
+
+try:
+    legitimate_result = compile_graph.invoke({
+        "email": legitimate_email,
+        "is_spam": None,
+        "spam_reason": None,
+        "email_category": None,
+        "email_draft": None,
+        "messages": []
+    })
+
+except Exception as e:
+    print("ERROR TYPE:", type(e).__name__)
+    print("ERROR MESSAGE:", e)
+
+
+# Process spam email
+print("\nProcessing spam email...")
+
+try:
+    spam_result = compile_graph.invoke({
+        "email": spam_email,
+        "is_spam": None,
+        "spam_reason": None,
+        "email_category": None,
+        "email_draft": None,
+        "messages": []
+    })
+except Exception as e:
+    print("ERROR TYPE:", type(e).__name__)
+    print("ERROR MESSAGE:", e)
